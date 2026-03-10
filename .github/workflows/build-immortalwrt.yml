@@ -26,12 +26,14 @@ jobs:
       run: |
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
         sudo -E apt-get -qq update
+        # 修正後的完整安裝腳本鏈接
         sudo -E apt-get -qq install $(curl -fsSL https://raw.githubusercontent.com)
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
+
 
     - name: Clone source code
       working-directory: /workdir
