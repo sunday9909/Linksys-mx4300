@@ -1,0 +1,76 @@
+name: Build ImmortalWrt 24.10 for MX4300
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: '是否在编译失败时开启 SSH 调试'
+        required: false
+        default: 'false'
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: openwrt-24.10
+  FEEDS_CONF: feeds.conf.default
+  CONFIG_FILE: .config
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: 检查代码
+      uses: actions/checkout@v4
+
+    - name: 初始化编译环境
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install $(curl -fsSL https://is.gd)
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+
+    - name: 下载源码
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: 加载 Feeds 并应用自定义配置
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        # 将仓库中的 files 目录拷贝进编译环境
+        [ -d $GITHUB_WORKSPACE/files ] && cp -r $GITHUB_WORKSPACE/files .
+
+    - name: 载入 .config 并编译
+      run: |
+        cd openwrt
+        # 如果仓库有 .config 则使用，否则使用默认配置
+        [ -e $GITHUB_WORKSPACE/.config ] && cp $GITHUB_WORKSPACE/.config .config
+        make defconfig
+        make download -j8
+        make -j$(nproc) || make -j1 V=s
+
+    - name: 整理固件文件
+      run: |
+        cd openwrt/bin/targets/ipq807x/generic
+        rm -rf packages
+        echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
+
+    - name: 上传固件到 GitHub Actions
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmortalWrt_MX4300_Firmware
+        path: ${{ env:FIRMWARE_PATH }}
