@@ -24,9 +24,6 @@ cd package/community
 # Nikki (Sing-box 核心代理)
 git clone --depth 1 https://github.com/nikkinikki-org/OpenWrt-nikki.git
 
-# OpenClash (Clash 核心代理)
-git clone --depth 1 -b https://github.com/vernesong/OpenClash.git
-
 # --- 实用管理工具 (sirpdboy 仓库) ---
 # 定时任务 (luci-app-taskplan)
 git clone --depth 1 https://github.com/sirpdboy/luci-app-taskplan
