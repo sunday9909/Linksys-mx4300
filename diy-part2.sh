@@ -16,4 +16,4 @@ sed -i '/add_list system.ntp.server/d' package/base-files/files/bin/config_gener
 sed -i "/set system.ntp.enable_server='0'/a \ \ \ \ \ \ \ \ add_list system.ntp.server='ntp1.aliyun.com'\n\t\tadd_list system.ntp.server='time1.google.com'\n\t\tadd_list system.ntp.server='time.cloudflare.com'\n\t\tadd_list system.ntp.server='pool.ntp.org'" package/base-files/files/bin/config_generate
 
 # 4. 修改 DTS：删除 app2_data 分区的只读属性
-find target/linux/qualcommax/dts/ -name "ipq8174-mx4300.dts" | xargs sed -i '/label = "app2_data";/,/read-only;/ { /read-only;/d }'
+find target/linux/qualcommax/files/arch/arm64/boot/dts/qcom/ipq8174-mx4300.dts/ -name "ipq8174-mx4300.dts" | xargs sed -i '/label = "app2_data";/,/read-only;/ { /read-only;/d }'
