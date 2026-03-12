@@ -15,6 +15,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # 【关键修复】显式声明写入权限，解决 "bad credentials" 报错
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout
@@ -22,10 +25,7 @@ jobs:
 
     - name: Initialization environment
       run: |
-        # 释放磁盘空间，保留必要的 sources.list.d 基础配置
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        
-        # 更新并安装编译 OpenWrt 必备依赖
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
           bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
@@ -34,20 +34,18 @@ jobs:
           libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 \
           python3-pip python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo \
           uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
-          
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
 
-
     - name: Clone source code
       run: |
         git clone $REPO_URL -b $REPO_BRANCH openwrt
-        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+        # 注意：此处 ln 命令如果 /workdir 不存在可能会报错，建议直接操作 openwrt 目录
 
     - name: Load custom feeds
       run: |
-        chmod +x $DIY_P1_SH
+        [ -e $DIY_P1_SH ] && chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
 
@@ -60,7 +58,7 @@ jobs:
     - name: Load custom configuration
       run: |
         [ -e $CONFIG_FILE ] && cp $CONFIG_FILE openwrt/.config
-        chmod +x $DIY_P2_SH
+        [ -e $DIY_P2_SH ] && chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
@@ -80,18 +78,19 @@ jobs:
       id: organize
       run: |
         mkdir -p $GITHUB_WORKSPACE/release_firmware
-        # 针对 ipq807x 路径提取 factory.bin
+        # 查找并拷贝固件
         find openwrt/bin/targets/ -name "*factory.bin" -exec cp {} $GITHUB_WORKSPACE/release_firmware/ \;
+        # 【关键修复】定义 Release 标签名
         echo "RELEASE_TAG=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
+        # 【关键修复】显式定义 FIRMWARE 变量路径
+        echo "FIRMWARE_PATH=$GITHUB_WORKSPACE/release_firmware" >> $GITHUB_ENV
         if [ "$(ls -A $GITHUB_WORKSPACE/release_firmware/)" ]; then
           echo "status=success" >> $GITHUB_OUTPUT
         fi
 
     - name: Upload firmware to release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       if: steps.organize.outputs.status == 'success' && !cancelled()
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ env.RELEASE_TAG }}
         body: |
@@ -99,4 +98,6 @@ jobs:
           - **Default IP:** 192.168.5.1
           - **Hostname:** LINKSYS-MX4300
           - **Included:** Nikki, Taskplan, ParentControl, Edge Theme, AirConnect/AirPlay2
-        files: ${{ env.FIRMWARE }}/*
+        # 【关键修复】使用上面定义的 FIRMWARE_PATH 变量
+        files: ${{ env.FIRMWARE_PATH }}/*
+
