@@ -10,8 +10,8 @@ set -e
 echo "开始执行 MX4300 mtd30 扩容脚本..."
 
 # 1. 安装必要工具
-echo "[1/6] 正在安装 UBI 工具..."
-opkg update && opkg install kmod-ubi ubi-utils
+#echo "[1/6] 正在安装 UBI 工具..."
+#opkg update && opkg install kmod-ubi ubi-utils
 
 # 2. 检查 mtd30 状态并关联
 echo "[2/6] 正在检查并关联 mtd30..."
