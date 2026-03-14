@@ -1,0 +1,16 @@
+ssh root@192.168.5.1 'sh -c "cat << \"EOF\" > /tmp/expand.sh
+#!/bin/sh
+set -e
+echo \"[1/4] 正在初始化 MTD30...\"
+ubiattach -p /dev/mtd30 2>/dev/null || (ubiformat /dev/mtd30 -y && ubiattach -p /dev/mtd30)
+ubimkvol /dev/ubi1 -N rootfs_data -m 2>/dev/null || true
+echo \"[2/4] 同步当前 /overlay 数据...\"
+mkdir -p /tmp/new_ov && mount -t ubifs ubi1_0 /tmp/new_ov
+cp -a /overlay/. /tmp/new_ov/ && sync
+echo \"[3/4] 修改启动项...\"
+sed -i \"/mtd30/d\" /etc/rc.local
+sed -i \"/exit 0/i ubiattach -p /dev/mtd30 2>/dev/null\nmount -t ubifs ubi1_0 /overlay\" /etc/rc.local
+echo \"[4/4] 扩容成功，重启中...\"
+umount /tmp/new_ov && sleep 2 && reboot
+EOF
+chmod +x /tmp/expand.sh && /tmp/expand.sh"'
