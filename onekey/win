@@ -1,0 +1,21 @@
+ssh root@192.168.5.1 "cat << 'EOF' > /tmp/expand.sh
+#!/bin/sh
+set -e
+echo '[1/4] 正在激活 MTD30 分区...'
+if ! ubiattach -p /dev/mtd30 2>/dev/null; then
+    ubiformat /dev/mtd30 -y && ubiattach -p /dev/mtd30
+fi
+echo '[2/4] 创建存储卷并同步数据...'
+ubimkvol /dev/ubi1 -N rootfs_data -m 2>/dev/null || true
+mkdir -p /tmp/new_ov
+mount -t ubifs ubi1_0 /tmp/new_ov
+cp -a /overlay/. /tmp/new_ov/
+sync
+echo '[3/4] 写入系统启动挂载配置...'
+sed -i '/mtd30/d' /etc/rc.local
+sed -i '/exit 0/i ubiattach -p /dev/mtd30 2>/dev/null\nmount -t ubifs ubi1_0 /overlay' /etc/rc.local
+echo '[4/4] 扩容完成，系统即将重启...'
+umount /tmp/new_ov
+sleep 2 && reboot
+EOF
+sh /tmp/expand.sh"
