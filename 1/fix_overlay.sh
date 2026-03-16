@@ -24,8 +24,6 @@ else
     echo "工具已就绪，跳过安装。"
 fi
 
-done
-
 # 2. 初始化 mtd30 (清理旧卷并重建)
 echo "[2/4] 初始化 mtd30 分区..."
 if ubiattach -p /dev/mtd30 2>/dev/null || [ $? -eq 17 ]; then
