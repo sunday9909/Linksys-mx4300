@@ -1,57 +1,72 @@
-cat << 'EOF' > /tmp/fix_overlay.sh
+cat << 'EOF' > /tmp/expand_root.sh
 #!/bin/sh
+
+# Linksys MX4300 (LN1301) mtd30 扩容 OpenClash 一键脚本 (带写入校验版)
 set -e
 
 echo "------------------------------------------------"
-echo "🛠️  正在修复 Linksys MX4300 存储挂载逻辑..."
+echo "⚠️  注意：即将格式化或挂载 MTD30 (约 353MB) 分区"
+echo "该分区通常为原厂 app2_data，请确保其中没有重要数据。"
 echo "------------------------------------------------"
-
-# 1. 清理之前脚本在 rc.local 中插入的冲突代码
-echo "[1/4] 清理 rc.local 冗余挂载..."
-sed -i '/mtd30/d' /etc/rc.local
-sed -i '/ubi1_0/d' /etc/rc.local
-sed -i '/clash/d' /etc/rc.local
-
-# 2. 确保 UBI 卷存在并格式化 (如果之前成功了这一步会很快)
-echo "[2/4] 检查 UBI 卷状态..."
-if ! ubiattach -p /dev/mtd30 2>/dev/null; then
-    [ $? -ne 17 ] && ubiformat /dev/mtd30 -y && ubiattach -p /dev/mtd30
+printf "请输入 'y' 确认继续执行: "
+read confirm
+if [ "$confirm" != "y" ]; then
+    echo "用户取消，脚本退出。"
+    exit 1
 fi
 
-if ! ubinfo /dev/ubi1_0 >/dev/null 2>&1; then
-    ubimkvol /dev/ubi1 -N rootfs_data -m
+# 1. 检查并安装工具 (已安装则跳过)
+echo "[1/6] 检查 UBI 工具..."
+if ! command -v ubinfo >/dev/null 2>&1; then
+    echo "未检测到 UBI 工具，正在尝试安装..."
+    opkg update && opkg install kmod-ubi ubi-utils || { echo "安装失败，请检查网络"; exit 1; }
+else
+    echo "工具已就绪，跳过安装。"
 fi
 
-# 3. 使用 UCI 配置标准的 fstab 挂载
-echo "[3/4] 写入系统级挂载配置 (UCI)..."
-# 移除旧的 overlay 配置防止冲突
-while uci -q delete fstab.@mount[0]; do :; done
+done
 
-# 添加新的挂载点
-uci add fstab mount
-uci set fstab.@mount[-1].device='ubi1_0'
-uci set fstab.@mount[-1].target='/overlay'
-uci set fstab.@mount[-1].fstype='ubifs'
-uci set fstab.@mount[-1].options='rw,noatime'
-uci set fstab.@mount[-1].enabled='1'
-uci commit fstab
+# 2. 初始化 mtd30 (清理旧卷并重建)
+echo "[2/4] 初始化 mtd30 分区..."
+if ubiattach -p /dev/mtd30 2>/dev/null || [ $? -eq 17 ]; then
+    # 如果已关联，先尝试清理
+    ubidetach -p /dev/mtd30 2>/dev/null || true
+fi
+ubiformat /dev/mtd30 -y
+ubiattach -p /dev/mtd30
+ubimkvol /dev/ubi1 -N root_overlay -m
 
-# 4. 触发系统同步
-echo "[4/4] 同步数据并准备重启..."
-mkdir -p /tmp/new_overlay
-mount -t ubifs ubi1_0 /tmp/new_overlay
-cp -a /overlay/. /tmp/new_overlay/ 2>/dev/null || true
-sync
-umount /tmp/new_overlay
+# 3. 同步数据 (将当前配置迁移到新分区)
+echo "[3/4] 迁移当前 Overlay 数据..."
+mkdir -p /mnt/new_overlay
+mount -t ubifs ubi1_0 /mnt/new_overlay
+cp -a /overlay/. /mnt/new_overlay/
+umount /mnt/new_overlay
+
+# 4. 写入挂载配置 (fstab)
+echo "[4/4] 更新挂载配置..."
+cat << FSTAB > /etc/config/fstab
+config global
+	option anon_swap '0'
+	option anon_mount '0'
+	option auto_swap '1'
+	option auto_mount '1'
+	option check_fs '0'
+
+config mount
+	option target '/overlay'
+	option device 'ubi1_0'
+	option fstype 'ubifs'
+	option enabled '1'
+FSTAB
 
 echo "------------------------------------------------"
-echo "✅ 修复完成！"
-echo "重启后请运行 'df -h'，观察 'overlayfs:/overlay' 的 Size。"
-echo "如果显示为 250MB+，则代表根目录真正扩容成功。"
+echo "✅ 扩容配置完成！系统将在 3 秒后重启。"
+echo "重启后，运行 'df -h' 确认 /overlay 大小约为 300MB+。"
 echo "------------------------------------------------"
-sleep 2
+sleep 3
 reboot
 EOF
 
-chmod +x /tmp/fix_overlay.sh
-/tmp/fix_overlay.sh
+chmod +x /tmp/expand_root.sh
+/tmp/expand_root.sh
